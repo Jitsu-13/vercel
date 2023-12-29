@@ -1,45 +1,35 @@
-module.exports = function (app) {
-   var AppController = require('../controllers/AppController');
+const express       = require('express');
+var bodyParser      = require('body-parser');
+var cors            = require('cors');
+var dotenv          = require('dotenv');
+var MongoClient     = require('mongoose');
 
-   const { check } = require('express-validator');
-   const jwt = require('jsonwebtoken');
-   const JWT_SECRET = process.env.JWT_SECRET;
+const app = express();
+app.use(cors());
 
-   function generateAccessToken(key) {
-       // expires after half and hour (1800 seconds = 30 minutes)
-       const accessToken = jwt.sign({ mobile: key }, JWT_SECRET, { expiresIn: '180000s' });
-       return accessToken;
-   }
-   
-   function authenticateToken(req, res, next) {
-       // Gather the jwt access token from the request header
-       const authHeader = req.headers['authorization'];
-       const token = authHeader && authHeader.split(' ')[0];
+// Enable environment variable
+dotenv.config();
 
-       //console.log(authHeader.split(' '));
-       if (token == null) return res.sendStatus(401) // if there isn't any token
-   
-       jwt.verify(token, process.env.JWT_SECRET, (err, mobile) => {
-         if (err) return res.sendStatus(401)
-         req.token = generateAccessToken(mobile);
-         next() // pass the execution off to whatever request the client intended
-       })
-   }
+// Connection to MongoDB server
+MongoClient.connect(process.env.MONGO_URI,{useNewUrlParser:true, useUnifiedTopology: true},function(){
+    console.log('Connect to MongoDB');
+});
 
-   app
+MongoClient.set('useFindAndModify', false);
+MongoClient.set('useCreateIndex', true);
 
-   .post('/app/company-department-shift-list', [
-       check('company').trim().isLength({ min: 1 }).withMessage('Company id required'),
-   ], AppController.company_department_shift_list)
+app.use(bodyParser.urlencoded({
+    extended:true,
+    limit: '10mb',
+    parameterLimit: 100000
+}));
+app.use(bodyParser.json()); // take json data
 
-   .post('/app/create-employee', [
-   ], AppController.create_employee)
+app.use(express.static('public'));
+app.use('/',express.static('public'));
 
-   .post('/app/login-employee', [
-       check('mobile').trim().isLength({ min: 1 }).withMessage('Enter mobile number'),
-       check('password').trim().isLength({ min: 1 }).withMessage('Enter password')
-   ], AppController.get_employee)
+process.env.TZ = 'Asia/Kolkata'; // here is the magical line
 
-   .post('/app/employee-mark-attend', [
-   ], authenticateToken, AppController.mark_attend)
-}
+require('./router/admin.js')(app);
+require('./router/app.js')(app);
+module.exports = app;
